@@ -241,17 +241,6 @@ When a job fails, the service generates an email like:
 - List of associated tasks with their status
 - Error messages from failed tasks
 
-## Development
-
-```bash
-# Install dependencies
-npm install
-
-# The service runs on the mu-javascript-template
-# Use docker-compose for local development
-docker-compose up
-```
-
 ## Related Services
 
 - [loket-error-alert-service](https://github.com/lblod/loket-error-alert-service) - Similar service for OSLC errors
