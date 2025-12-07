@@ -1,6 +1,6 @@
 # Job Alert Service
 
-Microservice that sends email notifications when jobs in the triplestore reach a specific status (e.g., failed). Designed for the [mu.semte.ch](https://mu.semte.ch/) microservices stack.
+Microservice that sends email notifications when jobs in the triplestore reach a specific status (e.g., failed). Designed for the [semantic.works](https://semantic.works/) microservices stack.
 
 See also the [loket-error-alert-service](https://github.com/lblod/loket-error-alert-service) for a similar service - on which this one is based - that alerts on errors.
 
