@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Job Alert</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <h2 style="color: #c0392b;">Job Alert: {{statusLabel}}</h2>
+
+  <p>Er is een job met status <strong>{{statusLabel}}</strong> gedetecteerd in het systeem.</p>
+
+  <h3 style="border-bottom: 1px solid #ddd; padding-bottom: 5px;">Job Details</h3>
+  <table style="width: 100%; border-collapse: collapse;">
+    <tr>
+      <td style="padding: 8px 0; font-weight: bold; width: 140px;">Job URI:</td>
+      <td style="padding: 8px 0;"><a href="{{jobUri}}">{{jobUri}}</a></td>
+    </tr>
+    {{#if jobUuid}}
+    <tr>
+      <td style="padding: 8px 0; font-weight: bold;">Job UUID:</td>
+      <td style="padding: 8px 0;">{{jobUuid}}</td>
+    </tr>
+    {{/if}}
+    <tr>
+      <td style="padding: 8px 0; font-weight: bold;">Status:</td>
+      <td style="padding: 8px 0;"><a href="{{status}}">{{statusLabel}}</a></td>
+    </tr>
+    {{#if operation}}
+    <tr>
+      <td style="padding: 8px 0; font-weight: bold;">Operation:</td>
+      <td style="padding: 8px 0;"><a href="{{operation}}">{{operationLabel}}</a></td>
+    </tr>
+    {{/if}}
+    {{#if created}}
+    <tr>
+      <td style="padding: 8px 0; font-weight: bold;">Aangemaakt:</td>
+      <td style="padding: 8px 0;">{{created}}</td>
+    </tr>
+    {{/if}}
+    {{#if modified}}
+    <tr>
+      <td style="padding: 8px 0; font-weight: bold;">Laatst gewijzigd:</td>
+      <td style="padding: 8px 0;">{{modified}}</td>
+    </tr>
+    {{/if}}
+    {{#if creator}}
+    <tr>
+      <td style="padding: 8px 0; font-weight: bold;">Creator:</td>
+      <td style="padding: 8px 0;"><a href="{{creator}}">{{creator}}</a></td>
+    </tr>
+    {{/if}}
+  </table>
+
+  {{#if tasks.length}}
+  <h3 style="border-bottom: 1px solid #ddd; padding-bottom: 5px; margin-top: 20px;">Taken</h3>
+  {{#each tasks}}
+  <div style="background-color: {{#if (eq this.statusLabel 'failed')}}#fdecea{{else}}#f9f9f9{{/if}}; border-left: 4px solid {{#if (eq this.statusLabel 'failed')}}#c0392b{{else}}#ddd{{/if}}; padding: 10px 15px; margin-bottom: 10px;">
+    <p style="margin: 0 0 5px 0;"><strong>Task {{this.index}}:</strong> {{this.operationLabel}}</p>
+    <p style="margin: 0 0 5px 0; font-size: 0.9em; color: #666;">Status: <strong>{{this.statusLabel}}</strong></p>
+    <p style="margin: 0; font-size: 0.85em; color: #888;">URI: <a href="{{this.uri}}">{{this.uri}}</a></p>
+    {{#if this.error}}
+    <p style="margin: 10px 0 0 0; padding: 10px; background-color: #fff; border: 1px solid #e74c3c; color: #c0392b;">
+      <strong>Error:</strong> {{this.error}}
+    </p>
+    {{/if}}
+  </div>
+  {{/each}}
+  {{/if}}
+
+  <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0 20px 0;">
+
+  <p style="font-size: 0.9em; color: #666;">
+    Als dit probleem aanhoudt, neem dan contact op met het ontwikkelteam.
+  </p>
+
+  <p style="font-size: 0.9em; color: #666;">
+    Met vriendelijke groeten,<br>
+    <strong>Het LBLOD development team</strong>
+  </p>
+
+  <p style="font-size: 0.8em; color: #999; margin-top: 30px;">
+    Opgelet, reageren op deze mail kan niet. Voor verdere hulp, mail naar <a
+        style="color: #007bff; text-decoration: none" href="mailto:loketlokaalbestuur@vlaanderen.be" target="_blank">loketlokaalbestuur@vlaanderen.be</a>.
+  </p>
+</body>
+</html>

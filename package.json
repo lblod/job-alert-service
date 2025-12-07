@@ -1,0 +1,17 @@
+{
+  "name": "job-alert-service",
+  "version": "1.0.0",
+  "description": "Service that sends out alerts when jobs reach a specific status (e.g., failed) in the triplestore",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "lblod@devloed.com",
+  "license": "MIT",
+  "dependencies": {
+    "@lblod/mu-auth-sudo": "^0.6.0",
+    "body-parser": "^1.20.2",
+    "env-var": "^7.4.1",
+    "handlebars": "^4.7.8"
+  }
+}
