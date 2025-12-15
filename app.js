@@ -2,9 +2,8 @@ import bodyParser from 'body-parser';
 import { app, errorHandler } from 'mu';
 import config from './config';
 import { DEBUG, JOB_STATUSES, JOB_OPERATIONS } from './env';
-import Delta from './src/model/delta';
-import DeltaService from './src/service/delta-service';
-import ScanService from './src/service/scan-service';
+import { findJobByUri, filterJobs, findJobsWithoutAlerts, extractLabel } from './lib/job';
+import { createAlertForJob } from './lib/email';
 
 // Log configuration on startup
 console.log('Job Alert Service starting...');
@@ -23,84 +22,137 @@ if (DEBUG) {
 app.use(bodyParser.json());
 
 /**
- * Health check endpoint
+ * Extract job URIs from delta message that match monitored statuses
  */
-app.get('/', function (req, res) {
-  res.send(
-    "Hello, you've reached the job-alert-service. Monitoring jobs for status changes."
+function extractJobUrisFromDelta(delta) {
+  const inserts = delta.flatMap((changeSet) => changeSet.inserts || []);
+  return inserts
+    .filter(
+      (t) =>
+        t.predicate.value === 'http://www.w3.org/ns/adms#status' &&
+        JOB_STATUSES.includes(t.object.value)
+    )
+    .map((t) => t.subject.value);
+}
+
+/**
+ * Process job URIs: fetch details, filter, create alerts
+ */
+async function processJobUris(uris) {
+  if (!uris?.length) {
+    console.log('No job URIs to process.');
+    return { processed: 0, created: 0 };
+  }
+
+  console.log(`Processing ${uris.length} job URI(s)...`);
+
+  // Fetch job details
+  const jobs = await Promise.all(
+    uris.map((uri) =>
+      findJobByUri(uri).catch((err) => {
+        console.warn(`Failed to fetch job <${uri}>:`, err.message);
+        return null;
+      })
+    )
   );
+
+  // Filter invalid and non-matching jobs
+  const validJobs = filterJobs(jobs.filter(Boolean));
+
+  if (validJobs.length === 0) {
+    console.log('No valid jobs to process after filtering.');
+    return { processed: 0, created: 0 };
+  }
+
+  console.log(`Creating alerts for ${validJobs.length} job(s)...`);
+
+  // Create alerts
+  const results = await Promise.allSettled(validJobs.map((job) => createAlertForJob(job)));
+
+  let created = 0;
+  let skipped = 0;
+
+  results.forEach((result, i) => {
+    if (result.status === 'fulfilled') {
+      if (result.value.created) {
+        created++;
+      } else {
+        skipped++;
+        console.log(`Skipped: Alert already exists for job <${validJobs[i].uri}>`);
+      }
+    } else {
+      console.error(`Error creating alert for job <${validJobs[i].uri}>:`, result.reason);
+    }
+  });
+
+  if (created > 0) console.log(`Successfully created ${created} alert(s).`);
+  if (skipped > 0) console.log(`Skipped ${skipped} job(s) with existing alerts.`);
+
+  return { processed: validJobs.length, created };
+}
+
+/**
+ * Health check
+ */
+app.get('/', (req, res) => {
+  res.send("Hello, you've reached the job-alert-service. Monitoring jobs for status changes.");
 });
 
 /**
- * Process incoming deltas from the delta-notifier
- * Triggers alerts when jobs reach a configured status (e.g., failed)
+ * Process deltas from delta-notifier
  */
 app.post('/delta', (req, res) => {
-  const delta = new Delta(req.body);
-
-  // Find all job URIs that have been updated to one of the monitored statuses
-  const jobURIs = delta.getInsertsForAny(
-    'http://www.w3.org/ns/adms#status',
-    JOB_STATUSES
-  );
+  const jobURIs = extractJobUrisFromDelta(req.body);
 
   if (DEBUG) {
-    console.log('Received delta with inserts:', delta.inserts.length);
-    console.log('Matching job URIs:', jobURIs);
+    console.log('Received delta, matching job URIs:', jobURIs);
   }
 
   if (!jobURIs.length) {
-    if (DEBUG) {
-      console.log(
-        'Delta did not contain any jobs with monitored status, awaiting next batch.'
-      );
-    }
+    if (DEBUG) console.log('Delta did not contain any jobs with monitored status.');
     return res.status(204).send();
   }
 
-  console.log(
-    `Found ${jobURIs.length} job(s) with monitored status in delta.`
-  );
+  console.log(`Found ${jobURIs.length} job(s) with monitored status in delta.`);
 
-  // Process asynchronously to prevent missing deltas
-  DeltaService.process(jobURIs).catch((e) => {
-    console.error('Something went wrong while processing delta:');
-    console.error(e);
+  // Process asynchronously
+  processJobUris(jobURIs).catch((e) => {
+    console.error('Error processing delta:', e);
   });
 
   return res.status(204).send();
 });
 
 /**
- * Manually create alerts for jobs with monitored statuses
- * Creates alerts for any matching jobs that don't have one yet
- *
- * Query parameters:
- * - since: ISO date string to only include jobs modified after this date
+ * Manually create alerts for jobs without alerts
  */
 app.post('/create-alerts', async (req, res, next) => {
   try {
     console.log('Manual alert creation triggered');
 
     const options = {};
-
-    // Parse optional 'since' parameter
     if (req.query.since) {
       const since = new Date(req.query.since);
       if (isNaN(since.getTime())) {
-        return res
-          .status(400)
-          .json({ error: 'Invalid date format for "since" parameter' });
+        return res.status(400).json({ error: 'Invalid date format for "since" parameter' });
       }
       options.since = since;
       console.log(`Creating alerts for jobs modified since: ${since.toISOString()}`);
     }
 
-    const result = await ScanService.createAlerts(options);
+    const jobs = await findJobsWithoutAlerts(options);
+    console.log(`Found ${jobs.length} job(s) without alerts.`);
+
+    if (jobs.length === 0) {
+      return res.status(200).json({ message: 'No jobs found requiring alerts.', found: 0, created: 0 });
+    }
+
+    const result = await processJobUris(jobs.map((j) => j.uri));
 
     return res.status(200).json({
-      message: `Created ${result.created} alert(s) for ${result.found} matching job(s).`,
-      ...result,
+      message: `Created ${result.created} alert(s) for ${jobs.length} matching job(s).`,
+      found: jobs.length,
+      created: result.created,
     });
   } catch (e) {
     console.error('Error creating alerts:', e);
@@ -109,35 +161,30 @@ app.post('/create-alerts', async (req, res, next) => {
 });
 
 /**
- * Dry run: find jobs that would be alerted without creating emails
- * Useful for testing configuration and previewing results
- *
- * Query parameters:
- * - since: ISO date string to only scan jobs modified after this date
+ * Dry run: find jobs that would receive alerts
  */
 app.post('/dry-run', async (req, res, next) => {
   try {
     console.log('Dry run triggered');
 
     const options = {};
-
-    // Parse optional 'since' parameter
     if (req.query.since) {
       const since = new Date(req.query.since);
       if (isNaN(since.getTime())) {
-        return res
-          .status(400)
-          .json({ error: 'Invalid date format for "since" parameter' });
+        return res.status(400).json({ error: 'Invalid date format for "since" parameter' });
       }
       options.since = since;
       console.log(`Dry run for jobs modified since: ${since.toISOString()}`);
     }
 
-    const result = await ScanService.dryRun(options);
+    const jobs = await findJobsWithoutAlerts(options);
+
+    console.log(`[DRY RUN] Found ${jobs.length} job(s) without alerts.`);
 
     return res.status(200).json({
-      message: `Dry run completed. Found ${result.count} job(s) that would receive alerts.`,
-      ...result,
+      message: `Dry run completed. Found ${jobs.length} job(s) that would receive alerts.`,
+      count: jobs.length,
+      jobs,
     });
   } catch (e) {
     console.error('Error during dry run:', e);
