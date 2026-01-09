@@ -174,10 +174,14 @@ Manually create alerts for jobs with monitored statuses. Creates alerts for any 
 **Examples**:
 ```bash
 # Create alerts for all jobs with monitored status
-curl -X POST http://localhost/job-alert/create-alerts
+curl -X POST http://localhost/create-alerts
+# Or via docker compose
+docker compose exec job-alert curl -X POST http://localhost/create-alerts
 
 # Create alerts only for jobs modified in the last 24 hours
-curl -X POST "http://localhost/job-alert/create-alerts?since=2025-12-04T00:00:00Z"
+curl -X POST "http://localhost/create-alerts?since=2025-12-04T00:00:00Z"
+# Or via docker compose
+docker compose exec job-alert curl -X POST "http://localhost/create-alerts?since=2025-12-04T00:00:00Z"
 ```
 
 **Response**:
@@ -200,10 +204,14 @@ Preview which jobs would receive alerts without actually creating emails. Useful
 **Examples**:
 ```bash
 # Preview all jobs that would be alerted
-curl -X POST http://localhost/job-alert/dry-run
+curl -X POST http://localhost/dry-run
+# Or via docker compose
+docker compose exec job-alert curl -X POST http://localhost/dry-run
 
 # Preview jobs modified since a specific date
-curl -X POST "http://localhost/job-alert/dry-run?since=2025-12-01T00:00:00Z"
+curl -X POST "http://localhost/dry-run?since=2025-12-01T00:00:00Z"
+# Or via docker compose
+docker compose exec job-alert curl -X POST "http://localhost/dry-run?since=2025-12-01T00:00:00Z"
 ```
 
 **Response**:
