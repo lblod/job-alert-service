@@ -46,15 +46,16 @@ async function processJobUris(uris) {
 
   console.log(`Processing ${uris.length} job URI(s)...`);
 
-  // Fetch job details
-  const jobs = await Promise.all(
-    uris.map((uri) =>
-      findJobByUri(uri).catch((err) => {
-        console.warn(`Failed to fetch job <${uri}>:`, err.message);
-        return null;
-      })
-    )
-  );
+  // Fetch job details sequentially to avoid overwhelming the database
+  const jobs = [];
+  for (const uri of uris) {
+    try {
+      jobs.push(await findJobByUri(uri));
+    } catch (err) {
+      console.warn(`Failed to fetch job <${uri}>:`, err.message);
+      jobs.push(null);
+    }
+  }
 
   // Filter invalid and non-matching jobs
   const validJobs = filterJobs(jobs.filter(Boolean));
@@ -66,24 +67,23 @@ async function processJobUris(uris) {
 
   console.log(`Creating alerts for ${validJobs.length} job(s)...`);
 
-  // Create alerts
-  const results = await Promise.allSettled(validJobs.map((job) => createAlertForJob(job)));
-
+  // Create alerts sequentially to avoid overwhelming the database
   let created = 0;
   let skipped = 0;
 
-  results.forEach((result, i) => {
-    if (result.status === 'fulfilled') {
-      if (result.value.created) {
+  for (const job of validJobs) {
+    try {
+      const result = await createAlertForJob(job);
+      if (result.created) {
         created++;
       } else {
         skipped++;
-        console.log(`Skipped: Alert already exists for job <${validJobs[i].uri}>`);
+        console.log(`Skipped: Alert already exists for job <${job.uri}>`);
       }
-    } else {
-      console.error(`Error creating alert for job <${validJobs[i].uri}>:`, result.reason);
+    } catch (err) {
+      console.error(`Error creating alert for job <${job.uri}>:`, err);
     }
-  });
+  }
 
   if (created > 0) console.log(`Successfully created ${created} alert(s).`);
   if (skipped > 0) console.log(`Skipped ${skipped} job(s) with existing alerts.`);
