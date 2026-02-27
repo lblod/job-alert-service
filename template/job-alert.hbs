@@ -8,6 +8,27 @@
 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
   <h2 style="color: #c0392b;">Job Alert: {{statusLabel}}</h2>
 
+  {{#if hasPreviousSuppressed}}
+  <div style="background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; padding: 12px 16px; margin-bottom: 16px;">
+    <p style="margin: 0 0 8px 0; font-weight: bold; color: #856404;">
+      Samenvatting onderdrukte alerts
+    </p>
+    <p style="margin: 0 0 8px 0; color: #856404;">
+      Tijdens het vorige tijdvenster werden <strong>{{previousSuppressedCount}}</strong> extra job alert(s) onderdrukt.
+      Hieronder een overzicht van de onderdrukte jobs:
+    </p>
+    <ul style="margin: 0; padding-left: 20px; color: #856404;">
+      {{#each previousSuppressed}}
+      <li style="margin-bottom: 4px;">
+        <a href="{{this.uri}}" style="color: #856404;">{{this.uri}}</a>
+        {{#if this.operationLabel}} &mdash; {{this.operationLabel}}{{/if}}
+        {{#if this.modified}} ({{this.modified}}){{/if}}
+      </li>
+      {{/each}}
+    </ul>
+  </div>
+  {{/if}}
+
   <p>Er is een job met status <strong>{{statusLabel}}</strong> gedetecteerd in het systeem.</p>
 
   <h3 style="border-bottom: 1px solid #ddd; padding-bottom: 5px;">Job Details</h3>
@@ -66,6 +87,16 @@
     {{/if}}
   </div>
   {{/each}}
+  {{/if}}
+
+  {{#if isLastAllowed}}
+  <div style="background-color: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; padding: 12px 16px; margin-top: 16px;">
+    <p style="margin: 0; color: #721c24;">
+      <strong>Opgelet:</strong> Dit is de laatste alert-email voor deze creator in het huidige tijdvenster.
+      Er worden de komende {{rateLimitWindowHours}} uur geen nieuwe alert-emails meer verstuurd voor jobs van deze creator.
+      Na afloop van het tijdvenster ontvangt u een samenvatting van eventueel onderdrukte alerts.
+    </p>
+  </div>
   {{/if}}
 
   <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0 20px 0;">

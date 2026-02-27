@@ -11,6 +11,7 @@ See also the [loket-error-alert-service](https://github.com/lblod/loket-error-al
 3. The service fetches job details including associated tasks and their errors
 4. An email is created in the triplestore for the [mail-delivery-service](https://github.com/redpencilio/deliver-email-service) to send
 5. Duplicate alerts for the same job are prevented
+6. Per-creator rate limiting prevents email flooding when jobs fail repeatedly (default: max 3 emails per hour per creator)
 
 ## Installation
 
@@ -72,6 +73,9 @@ To monitor multiple statuses, add additional rules or use a more flexible match 
 | `DEBUG` | No | `false` | Enable debug logging |
 | `JOB_STATUSES` | No | `http://redpencil.data.gift/id/concept/JobStatus/failed` | Comma-separated list of job status URIs to trigger alerts |
 | `JOB_OPERATIONS` | No | (all) | Comma-separated list of job operation URIs to filter on |
+| `RATE_LIMIT_ENABLED` | No | `true` | Enable per-creator email rate limiting |
+| `RATE_LIMIT_MAX` | No | `3` | Maximum number of alert emails per creator per time window |
+| `RATE_LIMIT_WINDOW_HOURS` | No | `1` | Rate limit time window in hours |
 
 ### Config File
 
@@ -163,7 +167,7 @@ Receives delta notifications from the delta-notifier. Processes job status chang
 
 ### POST /create-alerts
 
-Manually create alerts for jobs with monitored statuses. Creates alerts for any matching jobs that don't have an alert yet. Useful for:
+Manually create alerts for jobs with monitored statuses. Creates alerts for any matching jobs that don't have an alert yet. This endpoint bypasses rate limiting. Useful for:
 - Catching up on jobs that failed before the service was deployed
 - Re-creating alerts after configuration changes
 - Testing the service
@@ -235,6 +239,44 @@ docker compose exec job-alert curl -X POST "http://localhost/dry-run?since=2025-
   ]
 }
 ```
+
+### GET /rate-limit-status
+
+View the current state of all rate limit windows. Useful for understanding why emails may not be arriving.
+
+**Response**:
+- `200 OK` with JSON body:
+```json
+{
+  "enabled": true,
+  "config": {
+    "maxEmails": 3,
+    "windowHours": 1
+  },
+  "windows": {
+    "http://redpencil.data.gift/id/scheduled-job/example-1": {
+      "emailCount": 3,
+      "suppressedCount": 12,
+      "windowRemainingMs": 1800000,
+      "windowRemainingMinutes": 30
+    }
+  }
+}
+```
+
+## Rate Limiting
+
+When jobs from the same creator fail repeatedly, the service limits the number of alert emails to prevent mailbox flooding.
+
+**Behavior:**
+- By default, a maximum of 3 emails are sent per creator per hour
+- The last allowed email includes a warning that no more emails will be sent until the window expires
+- When the window expires and a new failure occurs, the first email includes a summary of all suppressed alerts from the previous window
+- Jobs without a `dcterms:creator` share a single rate limit bucket
+- The `/create-alerts` endpoint bypasses rate limiting since it is a manual action
+- Rate limit state is kept in-memory and resets on service restart
+
+**Configuration:** See the `RATE_LIMIT_*` environment variables above.
 
 ## Example
 

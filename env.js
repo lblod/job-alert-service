@@ -32,4 +32,20 @@ const JOB_OPERATIONS = env
   .map((s) => s.trim())
   .filter((s) => s.length > 0);
 
-export { EMAIL_FROM, EMAIL_TO, DEBUG, JOB_STATUSES, JOB_OPERATIONS };
+// Rate limiting configuration
+const RATE_LIMIT_ENABLED = env.get('RATE_LIMIT_ENABLED').default('true').asBool();
+const RATE_LIMIT_MAX = env.get('RATE_LIMIT_MAX').default('3').asIntPositive();
+const RATE_LIMIT_WINDOW_HOURS = env.get('RATE_LIMIT_WINDOW_HOURS').default('1').asIntPositive();
+const RATE_LIMIT_WINDOW_MS = RATE_LIMIT_WINDOW_HOURS * 60 * 60 * 1000;
+
+export {
+  EMAIL_FROM,
+  EMAIL_TO,
+  DEBUG,
+  JOB_STATUSES,
+  JOB_OPERATIONS,
+  RATE_LIMIT_ENABLED,
+  RATE_LIMIT_MAX,
+  RATE_LIMIT_WINDOW_HOURS,
+  RATE_LIMIT_WINDOW_MS,
+};

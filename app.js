@@ -1,9 +1,10 @@
 import bodyParser from 'body-parser';
 import { app, errorHandler } from 'mu';
 import config from './config';
-import { DEBUG, JOB_STATUSES, JOB_OPERATIONS } from './env';
+import { DEBUG, JOB_STATUSES, JOB_OPERATIONS, RATE_LIMIT_ENABLED, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_HOURS } from './env';
 import { findJobByUri, filterJobs, findJobsWithoutAlerts, extractLabel } from './lib/job';
 import { createAlertForJob } from './lib/email';
+import { checkRateLimit, getRateLimitStatus } from './lib/rate-limiter';
 
 // Log configuration on startup
 console.log('Job Alert Service starting...');
@@ -13,6 +14,11 @@ if (JOB_OPERATIONS.length > 0) {
 }
 if (config.creators.length > 0) {
   console.log(`Filtering by creators: ${config.creators.join(', ')}`);
+}
+if (RATE_LIMIT_ENABLED) {
+  console.log(`Rate limiting enabled: ${RATE_LIMIT_MAX} email(s) per ${RATE_LIMIT_WINDOW_HOURS} hour(s) per creator`);
+} else {
+  console.log('Rate limiting is disabled');
 }
 if (DEBUG) {
   console.log('Debug mode enabled');
@@ -38,10 +44,10 @@ function extractJobUrisFromDelta(delta) {
 /**
  * Process job URIs: fetch details, filter, create alerts
  */
-async function processJobUris(uris) {
+async function processJobUris(uris, options = {}) {
   if (!uris?.length) {
     console.log('No job URIs to process.');
-    return { processed: 0, created: 0 };
+    return { processed: 0, created: 0, rateLimited: 0 };
   }
 
   console.log(`Processing ${uris.length} job URI(s)...`);
@@ -62,7 +68,7 @@ async function processJobUris(uris) {
 
   if (validJobs.length === 0) {
     console.log('No valid jobs to process after filtering.');
-    return { processed: 0, created: 0 };
+    return { processed: 0, created: 0, rateLimited: 0 };
   }
 
   console.log(`Creating alerts for ${validJobs.length} job(s)...`);
@@ -70,10 +76,27 @@ async function processJobUris(uris) {
   // Create alerts sequentially to avoid overwhelming the database
   let created = 0;
   let skipped = 0;
+  let rateLimited = 0;
 
   for (const job of validJobs) {
     try {
-      const result = await createAlertForJob(job);
+      // Check rate limit (unless bypassed, e.g. manual /create-alerts)
+      let rateLimitContext = {};
+      if (!options.bypassRateLimit) {
+        const rlResult = checkRateLimit(job);
+        if (!rlResult.allowed) {
+          rateLimited++;
+          continue;
+        }
+        rateLimitContext = {
+          isLastAllowed: rlResult.isLastAllowed,
+          previousSuppressed: rlResult.previousSuppressed,
+          rateLimitMax: RATE_LIMIT_MAX,
+          rateLimitWindowHours: RATE_LIMIT_WINDOW_HOURS,
+        };
+      }
+
+      const result = await createAlertForJob(job, rateLimitContext);
       if (result.created) {
         created++;
       } else {
@@ -87,8 +110,9 @@ async function processJobUris(uris) {
 
   if (created > 0) console.log(`Successfully created ${created} alert(s).`);
   if (skipped > 0) console.log(`Skipped ${skipped} job(s) with existing alerts.`);
+  if (rateLimited > 0) console.log(`Rate-limited ${rateLimited} job(s).`);
 
-  return { processed: validJobs.length, created };
+  return { processed: validJobs.length, created, rateLimited };
 }
 
 /**
@@ -147,7 +171,7 @@ app.post('/create-alerts', async (req, res, next) => {
       return res.status(200).json({ message: 'No jobs found requiring alerts.', found: 0, created: 0 });
     }
 
-    const result = await processJobUris(jobs.map((j) => j.uri));
+    const result = await processJobUris(jobs.map((j) => j.uri), { bypassRateLimit: true });
 
     return res.status(200).json({
       message: `Created ${result.created} alert(s) for ${jobs.length} matching job(s).`,
@@ -190,6 +214,20 @@ app.post('/dry-run', async (req, res, next) => {
     console.error('Error during dry run:', e);
     return next(e);
   }
+});
+
+/**
+ * View current rate limit state
+ */
+app.get('/rate-limit-status', (req, res) => {
+  return res.status(200).json({
+    enabled: RATE_LIMIT_ENABLED,
+    config: {
+      maxEmails: RATE_LIMIT_MAX,
+      windowHours: RATE_LIMIT_WINDOW_HOURS,
+    },
+    windows: getRateLimitStatus(),
+  });
 });
 
 app.use(errorHandler);
